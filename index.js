@@ -1064,16 +1064,22 @@ if (!process.env.DISCORD_TOKEN) {
     process.exit(1);
 }
 
-console.log('🔄 กำลังเชื่อมต่อ Discord...');
+console.log('🔄 กำลังทดสอบ Discord Gateway...');
 
-async function testDiscordConnection() {
-    console.log('🌐 กำลังทดสอบการเชื่อมต่อ Discord API...');
+if (!process.env.DISCORD_TOKEN) {
+    console.error('❌ ไม่พบ DISCORD_TOKEN ใน Render Environment Variables');
+    process.exit(1);
+}
 
+async function testDiscordGateway() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
     try {
-        const response = await fetch('https://discord.com/api/v10/gateway', {
+        const response = await fetch('https://discord.com/api/v10/gateway/bot', {
+            headers: {
+                'Authorization': `Bot ${process.env.DISCORD_TOKEN}`
+            },
             signal: controller.signal
         });
 
@@ -1081,22 +1087,52 @@ async function testDiscordConnection() {
         const scope = response.headers.get('x-ratelimit-scope');
         const global = response.headers.get('x-ratelimit-global');
 
-        const text = await response.text();
+        const body = await response.text();
 
-        console.log(`🌐 Discord API Status: ${response.status}`);
+        console.log(`🌐 Discord Gateway Status: ${response.status}`);
         console.log(`🌐 RateLimit Scope: ${scope || 'ไม่มี'}`);
         console.log(`🌐 RateLimit Global: ${global || 'ไม่มี'}`);
         console.log(`🌐 Retry-After: ${retryAfter || 'ไม่มี'}`);
-        console.log(`🌐 Response: ${text}`);
 
-        if (response.ok) {
-            const data = JSON.parse(text);
-            console.log(`🌐 Discord Gateway URL: ${data.url}`);
+        if (!response.ok) {
+            console.error(`❌ Discord ตอบกลับ: ${body}`);
+            return false;
         }
 
+        const data = JSON.parse(body);
+
+        console.log(`✅ Gateway URL: ${data.url}`);
+        console.log(`✅ Recommended Shards: ${data.shards}`);
+        console.log(
+            `✅ Session Remaining: ${data.session_start_limit?.remaining}`
+        );
+
+        return true;
+
     } catch (error) {
-        console.error('❌ Discord API Connection Failed:', error.message);
+        console.error('❌ Discord Gateway Test Failed:', error.message);
+        return false;
     } finally {
         clearTimeout(timeout);
     }
 }
+
+testDiscordGateway()
+    .then(success => {
+        if (!success) {
+            console.error('❌ หยุดการ Login เพราะ Discord Gateway Test ไม่ผ่าน');
+            return;
+        }
+
+        console.log('🔄 กำลัง Login เข้า Discord...');
+
+        return client.login(process.env.DISCORD_TOKEN);
+    })
+    .then(() => {
+        if (client.isReady()) {
+            console.log(`✅ บอท ${client.user.tag} ออนไลน์ (Render)`);
+        }
+    })
+    .catch(error => {
+        console.error('❌ Discord Login Failed:', error);
+    });
