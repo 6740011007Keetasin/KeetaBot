@@ -1027,8 +1027,20 @@ client.on('warn', warning => {
     console.warn('⚠️ Discord Warning:', warning);
 });
 
-client.on('shardError', error => {
-    console.error('❌ Discord Shard Error:', error);
+client.on('debug', info => {
+    console.log('🔍 Discord Debug:', info);
+});
+
+client.on('shardError', (error, shardId) => {
+    console.error(`❌ Discord Shard ${shardId} Error:`, error);
+});
+
+client.on('shardReconnecting', shardId => {
+    console.log(`🔄 Discord Shard ${shardId} กำลังเชื่อมต่อใหม่...`);
+});
+
+client.on('shardReady', shardId => {
+    console.log(`✅ Discord Shard ${shardId} พร้อมใช้งาน`);
 });
 
 client.once('ready', () => {
@@ -1048,12 +1060,17 @@ process.on('uncaughtException', error => {
 });
 
 if (!process.env.DISCORD_TOKEN) {
-    console.error('❌ ไม่พบ DISCORD_TOKEN ใน Environment Variables ของ Render');
+    console.error('❌ ไม่พบ DISCORD_TOKEN ใน Render Environment Variables');
     process.exit(1);
 }
 
 console.log('🔄 กำลังเชื่อมต่อ Discord...');
 
-client.login(process.env.DISCORD_TOKEN).catch(error => {
-    console.error('❌ Discord Login Failed:', error);
-});
+client.login(process.env.DISCORD_TOKEN)
+    .then(token => {
+        console.log('🔑 Discord login request สำเร็จ');
+        console.log(`🔑 Token ที่ได้รับกลับมา: ${token ? 'มีค่า' : 'ไม่มีค่า'}`);
+    })
+    .catch(error => {
+        console.error('❌ Discord Login Failed:', error);
+    });
