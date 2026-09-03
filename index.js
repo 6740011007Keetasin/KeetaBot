@@ -1066,10 +1066,34 @@ if (!process.env.DISCORD_TOKEN) {
 
 console.log('🔄 กำลังเชื่อมต่อ Discord...');
 
+async function testDiscordConnection() {
+    console.log('🌐 กำลังทดสอบการเชื่อมต่อ Discord API...');
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    try {
+        const response = await fetch('https://discord.com/api/v10/gateway', {
+            signal: controller.signal
+        });
+
+        console.log(`🌐 Discord API Status: ${response.status}`);
+
+        const data = await response.json();
+        console.log(`🌐 Discord Gateway URL: ${data.url}`);
+
+    } catch (error) {
+        console.error('❌ Discord API Connection Failed:', error.message);
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+testDiscordConnection();
+
 client.login(process.env.DISCORD_TOKEN)
-    .then(token => {
-        console.log('🔑 Discord login request สำเร็จ');
-        console.log(`🔑 Token ที่ได้รับกลับมา: ${token ? 'มีค่า' : 'ไม่มีค่า'}`);
+    .then(() => {
+        console.log('🔑 Discord Login Request สำเร็จ');
     })
     .catch(error => {
         console.error('❌ Discord Login Failed:', error);
