@@ -181,4 +181,6 @@ client.once('ready', () => {
     setInterval(setRandomStatus, SEVENTEEN_DAYS_MS);
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN).catch(error => {
+    console.error('Discord login failed:', error);
+});
