@@ -1039,6 +1039,21 @@ client.once('ready', () => {
     setInterval(setRandomStatus, SEVENTEEN_DAYS_MS);
 });
 
+process.on('unhandledRejection', error => {
+    console.error('❌ Unhandled Promise Rejection:', error);
+});
+
+process.on('uncaughtException', error => {
+    console.error('❌ Uncaught Exception:', error);
+});
+
+if (!process.env.DISCORD_TOKEN) {
+    console.error('❌ ไม่พบ DISCORD_TOKEN ใน Environment Variables ของ Render');
+    process.exit(1);
+}
+
+console.log('🔄 กำลังเชื่อมต่อ Discord...');
+
 client.login(process.env.DISCORD_TOKEN).catch(error => {
-    console.error('Discord login failed:', error);
+    console.error('❌ Discord Login Failed:', error);
 });
