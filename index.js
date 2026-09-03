@@ -1077,10 +1077,22 @@ async function testDiscordConnection() {
             signal: controller.signal
         });
 
-        console.log(`🌐 Discord API Status: ${response.status}`);
+        const retryAfter = response.headers.get('retry-after');
+        const scope = response.headers.get('x-ratelimit-scope');
+        const global = response.headers.get('x-ratelimit-global');
 
-        const data = await response.json();
-        console.log(`🌐 Discord Gateway URL: ${data.url}`);
+        const text = await response.text();
+
+        console.log(`🌐 Discord API Status: ${response.status}`);
+        console.log(`🌐 RateLimit Scope: ${scope || 'ไม่มี'}`);
+        console.log(`🌐 RateLimit Global: ${global || 'ไม่มี'}`);
+        console.log(`🌐 Retry-After: ${retryAfter || 'ไม่มี'}`);
+        console.log(`🌐 Response: ${text}`);
+
+        if (response.ok) {
+            const data = JSON.parse(text);
+            console.log(`🌐 Discord Gateway URL: ${data.url}`);
+        }
 
     } catch (error) {
         console.error('❌ Discord API Connection Failed:', error.message);
@@ -1088,13 +1100,3 @@ async function testDiscordConnection() {
         clearTimeout(timeout);
     }
 }
-
-testDiscordConnection();
-
-client.login(process.env.DISCORD_TOKEN)
-    .then(() => {
-        console.log('🔑 Discord Login Request สำเร็จ');
-    })
-    .catch(error => {
-        console.error('❌ Discord Login Failed:', error);
-    });
