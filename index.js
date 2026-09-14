@@ -1181,37 +1181,43 @@ async function fetchBrightDataFacebook(url) {
                 row.author_name
             ) || 'Facebook';
 
-        const imageAttachment =
-            Array.isArray(row.attachments)
-                ? row.attachments.find(
-                    item =>
-                        item?.attachment_url &&
-                        !item?.video_url &&
-                        !/video|reel/i.test(
-                            String(item?.type || '')
-                        )
-                )
-                : null;
+        const attachments = Array.isArray(row.attachments)
+    ? row.attachments
+    : [];
 
-        const videoAttachment =
-            Array.isArray(row.attachments)
-                ? row.attachments.find(
-                    item =>
-                        item?.video_url ||
-                        /video|reel/i.test(
-                            String(item?.type || '')
-                        )
-                )
-                : null;
+const imageAttachment = attachments.find(item => {
+    const type = String(item?.type || '').toLowerCase();
 
-        const imageUrl =
-            imageAttachment?.attachment_url ||
-            row.page_logo ||
-            null;
+    return (
+        !item?.video_url &&
+        !/video|reel/.test(type) &&
+        (
+            item?.attachment_url ||
+            item?.image_url ||
+            item?.thumbnail_url ||
+            item?.url
+        )
+    );
+});
 
-        const videoUrl =
-            videoAttachment?.video_url ||
-            null;
+const videoAttachment = attachments.find(item => {
+    const type = String(item?.type || '').toLowerCase();
+
+    return (
+        item?.video_url ||
+        /video|reel/.test(type)
+    );
+});
+
+const imageUrl =
+    imageAttachment?.attachment_url ||
+    imageAttachment?.image_url ||
+    imageAttachment?.thumbnail_url ||
+    null;
+
+const videoUrl =
+    videoAttachment?.video_url ||
+    null;
 
         const result = {
             type: 'facebook',
