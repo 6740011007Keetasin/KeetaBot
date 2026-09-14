@@ -694,82 +694,306 @@ async function fetchInstagramMetadata(originalUrl) {
     }
 }
 
-async function fetchFacebookMetadata(originalUrl) {
-    const cleanedUrl = cleanUrl(originalUrl);
-    const cached = getCache(cleanedUrl);
+function parseFacebookMetadataHtml(html, finalUrl) {
+    const author =
+        getMeta(html, 'og:title') ||
+        getMeta(html, 'twitter:title') ||
+        '';
 
-    if (cached) return cached;
+    const caption =
+        getMeta(html, 'og:description') ||
+        getMeta(html, 'twitter:description') ||
+        '';
 
-    const proxyUrl = convertSocialUrl(cleanedUrl);
+    const image =
+        getMeta(html, 'og:image') ||
+        getMeta(html, 'twitter:image') ||
+        '';
 
-    if (!proxyUrl) return null;
+    const siteName = getMeta(html, 'og:site_name') || '';
 
+    let likes = null;
+    let comments = null;
+    let dateText = null;
+
+    const siteParts = siteName
+        .split('\n')
+        .map(item => decodeHtml(item).trim())
+        .filter(Boolean);
+
+    if (siteParts.length >= 2) {
+        dateText = siteParts[1];
+    }
+
+    const statsText = siteParts.slice(2).join(' ');
+
+    const likesMatch = statsText.match(/(?:❤️|♥️)\s*([\d.,KM]+)/i);
+    const commentsMatch = statsText.match(/💬\s*([\d.,KM]+)/i);
+
+    if (likesMatch) {
+        likes = likesMatch[1];
+    }
+
+    if (commentsMatch) {
+        comments = commentsMatch[1];
+    }
+
+    const videoUrl =
+        getMeta(html, 'og:video') ||
+        getMeta(html, 'og:video:url') ||
+        getMeta(html, 'twitter:player:stream') ||
+        null;
+
+    const result = {
+        type: 'facebook',
+        fullName: stripHtml(author),
+        username: null,
+        profilePicUrl: null,
+        caption: stripHtml(caption),
+        likes,
+        comments,
+        dateText,
+        imageUrl: absoluteUrl(image, finalUrl),
+        videoUrl: absoluteUrl(videoUrl, finalUrl),
+        isVideo: !!videoUrl,
+        canonicalUrl: getMeta(html, 'og:url') || finalUrl
+    };
+
+    if (!result.fullName && !result.caption && !result.imageUrl) {
+        return null;
+    }
+
+    return result;
+}
+
+
+async function fetchFacebookHtml(url, label, userAgent = FACEBOOK_UA) {
     try {
-        const response = await fetch(proxyUrl, {
+        const response = await fetch(url, {
             headers: {
-                'User-Agent': DISCORD_BOT_UA,
+                'User-Agent': userAgent,
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9'
+                'Accept-Language': 'en-US,en;q=0.9,th;q=0.8'
             },
             redirect: 'follow',
             signal: AbortSignal.timeout(15000)
         });
 
+        const finalUrl = response.url || url;
+        const html = await response.text();
+
+        console.log(
+            `Facebook ${label}: ${response.status} | final=${finalUrl} | html=${html.length} bytes`
+        );
+
         if (!response.ok) {
-            console.log(`Facebed ตอบ ${response.status}: ${proxyUrl}`);
             return null;
         }
 
-        const html = await response.text();
-        const finalUrl = response.url || proxyUrl;
-
-        const author = getMeta(html, 'og:title') || getMeta(html, 'twitter:title') || '';
-        const caption = getMeta(html, 'og:description') || getMeta(html, 'twitter:description') || '';
-        const image = getMeta(html, 'og:image') || getMeta(html, 'twitter:image') || '';
-        const siteName = getMeta(html, 'og:site_name') || '';
-
-        let likes = null;
-        let comments = null;
-        let dateText = null;
-
-        const siteParts = siteName
-            .split('\n')
-            .map(item => decodeHtml(item).trim())
-            .filter(Boolean);
-
-        if (siteParts.length >= 2) {
-            dateText = siteParts[1];
-        }
-
-        const statsText = siteParts.slice(2).join(' ');
-
-        const likesMatch = statsText.match(/(?:❤️|♥️)\s*([\d.,KM]+)/i);
-        const commentsMatch = statsText.match(/💬\s*([\d.,KM]+)/i);
-
-        if (likesMatch) likes = likesMatch[1];
-        if (commentsMatch) comments = commentsMatch[1];
-
-        const result = {
-            type: 'facebook',
-            originalUrl: cleanedUrl,
-            fullName: stripHtml(author),
-            username: null,
-            profilePicUrl: null,
-            caption: stripHtml(caption),
-            likes,
-            comments,
-            dateText,
-            imageUrl: absoluteUrl(image, finalUrl),
-            videoUrl: getMeta(html, 'og:video') || getMeta(html, 'twitter:player:stream') || null,
-            isVideo: !!(getMeta(html, 'og:video') || getMeta(html, 'twitter:player:stream'))
+        return {
+            html,
+            finalUrl
         };
 
-        if (!result.fullName && !result.caption && !result.imageUrl) return null;
-
-        setCache(cleanedUrl, result);
-        return result;
     } catch (error) {
-        console.log(`Facebook metadata error: ${error.message}`);
+        console.log(
+            `Facebook ${label} ไม่สำเร็จ: ${error.message}`
+        );
+
+        return null;
+    }
+}
+
+
+async function resolveFacebookShareUrl(originalUrl) {
+    try {
+        const cleanedUrl = cleanUrl(originalUrl);
+        const url = new URL(cleanedUrl);
+
+        if (!url.pathname.toLowerCase().startsWith('/share/')) {
+            return null;
+        }
+
+        const shareVariants = [
+            `https://www.facebook.com${url.pathname}${url.search}`,
+            `https://m.facebook.com${url.pathname}${url.search}`
+        ];
+
+        for (const shareUrl of shareVariants) {
+            try {
+                const response = await fetch(shareUrl, {
+                    headers: {
+                        'User-Agent': FACEBOOK_UA,
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9,th;q=0.8'
+                    },
+                    redirect: 'manual',
+                    signal: AbortSignal.timeout(10000)
+                });
+
+                const location = response.headers.get('location');
+
+                console.log(
+                    `Facebook share resolve: ${response.status} | ${shareUrl} | location=${location || 'ไม่มี'}`
+                );
+
+                if (location) {
+                    const resolved = new URL(
+                        location,
+                        shareUrl
+                    ).href;
+
+                    if (
+                        !resolved.includes('/login') &&
+                        !resolved.includes('/checkpoint') &&
+                        !resolved.includes('/recover')
+                    ) {
+                        return cleanUrl(resolved);
+                    }
+                }
+
+            } catch (error) {
+                console.log(
+                    `Facebook share resolve ไม่สำเร็จ (${shareUrl}): ${error.message}`
+                );
+            }
+        }
+
+        return null;
+
+    } catch (error) {
+        console.log(
+            `Facebook share URL ไม่ถูกต้อง: ${error.message}`
+        );
+
+        return null;
+    }
+}
+
+
+async function fetchFacebookMetadata(originalUrl) {
+    const cleanedUrl = cleanUrl(originalUrl);
+
+    const cached = getCache(cleanedUrl);
+
+    if (cached) {
+        return cached;
+    }
+
+    try {
+        const original = new URL(cleanedUrl);
+        const resolvedUrl = await resolveFacebookShareUrl(
+            cleanedUrl
+        );
+
+        const candidateUrls = [];
+
+        const addCandidate = (url, source) => {
+            if (!url) {
+                return;
+            }
+
+            const clean = cleanUrl(url);
+
+            if (
+                !candidateUrls.some(
+                    item => item.url === clean
+                )
+            ) {
+                candidateUrls.push({
+                    url: clean,
+                    source
+                });
+            }
+        };
+        addCandidate(
+            cleanedUrl,
+            'direct'
+        );
+        addCandidate(
+            resolvedUrl,
+            'resolved'
+        );
+        const proxyOriginal =
+            convertSocialUrl(cleanedUrl);
+
+        addCandidate(
+            proxyOriginal,
+            'facebed-original'
+        );
+        const proxyResolved = resolvedUrl
+            ? convertSocialUrl(resolvedUrl)
+            : null;
+
+        addCandidate(
+            proxyResolved,
+            'facebed-resolved'
+        );
+        if (
+            original.hostname.toLowerCase() !==
+            'm.facebook.com'
+        ) {
+            addCandidate(
+                `https://m.facebook.com${original.pathname}${original.search}`,
+                'mobile'
+            );
+        }
+        for (const candidate of candidateUrls) {
+
+            const fetched = await fetchFacebookHtml(
+                candidate.url,
+                candidate.source,
+                FACEBOOK_UA
+            );
+
+            if (!fetched) {
+                continue;
+            }
+
+            const result =
+                parseFacebookMetadataHtml(
+                    fetched.html,
+                    fetched.finalUrl
+                );
+            if (!result) {
+                console.log(
+                    `Facebook ${candidate.source}: ไม่พบ OG metadata ที่ใช้สร้าง Embed`
+                );
+
+                continue;
+            }
+
+            result.originalUrl = cleanedUrl;
+
+            if (result.canonicalUrl) {
+                console.log(
+                    `Facebook metadata สำเร็จจาก ${candidate.source}: ${result.canonicalUrl}`
+                );
+            } else {
+                console.log(
+                    `Facebook metadata สำเร็จจาก ${candidate.source}`
+                );
+            }
+
+            setCache(
+                cleanedUrl,
+                result
+            );
+
+            return result;
+        }
+
+        console.log(
+            `Facebook metadata ล้มเหลวทุกทาง: ${cleanedUrl}`
+        );
+
+        return null;
+
+    } catch (error) {
+        console.log(
+            `Facebook metadata error: ${error.message}`
+        );
+
         return null;
     }
 }
@@ -1014,10 +1238,6 @@ function setRandomStatus() {
     const randomStatus = statusList[Math.floor(Math.random() * statusList.length)];
     client.user.setPresence({ activities: [randomStatus] });
 }
-
-/* ================================
-   Discord Error Logging
-   ================================ */
 
 client.on('error', error => {
     console.error('❌ Discord Client Error:', error);
