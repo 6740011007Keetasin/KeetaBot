@@ -1,15 +1,14 @@
 const { Client, GatewayIntentBits, AuditLogEvent, ActivityType, EmbedBuilder } = require('discord.js');
 const express = require('express');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 app.get('/', (req, res) => res.send('ระบบเก็บ Log 24 ชั่วโมงกำลังทำงาน!'));
 app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent
@@ -17,6 +16,10 @@ const client = new Client({
 });
 
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '1535687188048511036';
+
+// MEMBER JOIN / WELCOME
+const MEMBER_LOG_CHANNEL_ID = '1393842157189730356';
+const INTRO_CHANNEL_ID = '1549878150958284941';
 
 const IG_PROXY_DOMAIN = 'oginstagram.com';
 
@@ -45,11 +48,7 @@ const DISCORD_BOT_UA =
 const FACEBOOK_UA =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
 
-
-// ========================================
 // DATE
-// ========================================
-
 function getDateStr() {
     const dateString = new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Bangkok',
@@ -63,15 +62,10 @@ function getDateStr() {
     return `${day}/${month}/${parseInt(yearCE) + 543}`;
 }
 
-
-// ========================================
 // URL
-// ========================================
-
 function cleanUrl(url) {
     return url.replace(/[),.!?;:'"]+$/g, '');
 }
-
 
 function getSocialType(url) {
     try {
@@ -103,7 +97,6 @@ function getSocialType(url) {
         return null;
     }
 }
-
 
 function convertSocialUrl(originalUrl, facebookDomain = null) {
     try {
@@ -138,11 +131,7 @@ function convertSocialUrl(originalUrl, facebookDomain = null) {
     }
 }
 
-
-// ========================================
 // HTML
-// ========================================
-
 function decodeHtml(text = '') {
     return String(text)
         .replace(
@@ -161,7 +150,6 @@ function decodeHtml(text = '') {
         .replace(/&gt;/gi, '>');
 }
 
-
 function stripHtml(text = '') {
     return decodeHtml(
         String(text)
@@ -173,7 +161,6 @@ function stripHtml(text = '') {
     );
 }
 
-
 function limitText(text, max) {
     if (!text) return '';
 
@@ -182,11 +169,7 @@ function limitText(text, max) {
         : `${text.slice(0, max - 3)}...`;
 }
 
-
-// ========================================
 // COUNT / STATS
-// ========================================
-
 function formatCount(value) {
     if (
         value === null ||
@@ -208,7 +191,6 @@ function formatCount(value) {
 
     return text;
 }
-
 
 function formatStats(likes, comments) {
     const parts = [];
@@ -232,11 +214,7 @@ function formatStats(likes, comments) {
     return parts.join(' • ');
 }
 
-
-// ========================================
 // URL HELPERS
-// ========================================
-
 function absoluteUrl(url, baseUrl) {
     if (!url) return null;
 
@@ -246,7 +224,6 @@ function absoluteUrl(url, baseUrl) {
         return null;
     }
 }
-
 
 function getMeta(html, name) {
     const escaped = name.replace(
@@ -287,7 +264,6 @@ function getMeta(html, name) {
     return null;
 }
 
-
 function getAlternateActivityJson(html, baseUrl) {
     const patterns = [
         /<link[^>]+rel=["'][^"']*alternate[^"']*["'][^>]+type=["']application\/activity\+json["'][^>]+href=["']([^"']+)["'][^>]*>/i,
@@ -306,11 +282,7 @@ function getAlternateActivityJson(html, baseUrl) {
     return null;
 }
 
-
-// ========================================
 // CACHE
-// ========================================
-
 function getCache(key) {
     const cached = metadataCache.get(key);
 
@@ -326,7 +298,6 @@ function getCache(key) {
 
     return cached.data;
 }
-
 
 function setCache(key, data) {
     metadataCache.set(key, {
@@ -344,11 +315,7 @@ function setCache(key, data) {
     }
 }
 
-
-// ========================================
 // JSON
-// ========================================
-
 function extractBalancedJson(text, start) {
     if (
         start < 0 ||
@@ -395,11 +362,7 @@ function extractBalancedJson(text, start) {
     return null;
 }
 
-
-// ========================================
 // INSTAGRAM NORMALIZE
-// ========================================
-
 function normalizeInstagramMedia(node) {
     if (
         !node ||
@@ -514,11 +477,7 @@ function normalizeInstagramMedia(node) {
     };
 }
 
-
-// ========================================
 // INSTAGRAM GRAPHQL NORMALIZE
-// ========================================
-
 function normalizeGraphqlMedia(node) {
     if (
         !node ||
@@ -627,11 +586,7 @@ function normalizeGraphqlMedia(node) {
     };
 }
 
-
-// ========================================
 // INSTAGRAM OG
-// ========================================
-
 function parseInstagramOg(html, finalUrl) {
     const title =
         getMeta(html, 'og:title') ||
@@ -761,11 +716,7 @@ function parseInstagramOg(html, finalUrl) {
     };
 }
 
-
-// ========================================
 // INSTAGRAM GOOGLEBOT
-// ========================================
-
 async function fetchInstagramGooglebot(code) {
     try {
         const url =
@@ -866,11 +817,7 @@ async function fetchInstagramGooglebot(code) {
     }
 }
 
-
-// ========================================
 // INSTAGRAM GRAPHQL
-// ========================================
-
 async function fetchInstagramGraphql(code) {
     try {
         const body =
@@ -1006,11 +953,7 @@ async function fetchInstagramGraphql(code) {
     }
 }
 
-
-// ========================================
 // INSTAGRAM PROFILE FEED
-// ========================================
-
 async function fetchInstagramProfileFeed(
     username,
     code
@@ -1087,11 +1030,7 @@ async function fetchInstagramProfileFeed(
     }
 }
 
-
-// ========================================
 // INSTAGRAM EMBED PAGE
-// ========================================
-
 async function fetchInstagramEmbedPage(code) {
     try {
         const url =
@@ -1233,11 +1172,7 @@ async function fetchInstagramEmbedPage(code) {
     }
 }
 
-
-// ========================================
 // INSTAGRAM METADATA
-// ========================================
-
 async function fetchInstagramMetadata(
     originalUrl
 ) {
@@ -1518,11 +1453,7 @@ async function fetchInstagramMetadata(
     }
 }
 
-
-// ========================================
 // FACEBOOK METADATA
-// ========================================
-
 async function fetchFacebookMetadata(
     originalUrl
 ) {
@@ -1809,11 +1740,7 @@ async function fetchFacebookMetadata(
     }
 }
 
-
-// ========================================
 // SOCIAL METADATA
-// ========================================
-
 async function fetchSocialMetadata(
     originalUrl
 ) {
@@ -1837,11 +1764,7 @@ async function fetchSocialMetadata(
     return null;
 }
 
-
-// ========================================
 // SOCIAL EMBED
-// ========================================
-
 function buildSocialEmbed(data) {
     const isInstagram =
         data.type === 'instagram';
@@ -1962,11 +1885,7 @@ function buildSocialEmbed(data) {
     return embed;
 }
 
-
-// ========================================
 // VOICE LOG
-// ========================================
-
 client.on(
     'voiceStateUpdate',
     (oldState, newState) => {
@@ -2094,11 +2013,64 @@ client.on(
     }
 );
 
+// MEMBER JOIN / WELCOME
+client.on(
+    'guildMemberAdd',
+    async member => {
+        // ไม่ต้องทักบอทที่ถูกเพิ่มเข้ามา
+        if (member.user.bot) {
+            return;
+        }
 
-// ========================================
+        const memberLogChannel =
+            await member.guild.channels.fetch(
+                MEMBER_LOG_CHANNEL_ID
+            ).catch(() => null);
+
+        const introChannel =
+            await member.guild.channels.fetch(
+                INTRO_CHANNEL_ID
+            ).catch(() => null);
+
+        const dateStr =
+            getDateStr();
+
+        // ห้องบันทึกคนเข้าเซิร์ฟ
+        if (memberLogChannel?.isTextBased()) {
+            await memberLogChannel.send(
+                `${dateStr} 📥 <@${member.id}> **เข้ามาในเซิร์ฟเวอร์แล้ว**`
+            ).catch(error => {
+                console.error(
+                    `❌ ส่งข้อความเข้าห้องคนเข้าออกไม่สำเร็จ: ${error.message}`
+                );
+            });
+
+        } else {
+            console.error(
+                `❌ ไม่พบห้องคนเข้าออก ${MEMBER_LOG_CHANNEL_ID} หรือบอทไม่มีสิทธิ์ส่งข้อความ`
+            );
+        }
+
+        // ห้องแนะนำตัว
+        if (introChannel?.isTextBased()) {
+            await introChannel.send({
+                content:
+                    `สวัสดีครับ <@${member.id}>! 🐶\nยินดีต้อนรับเข้าสู่ **${member.guild.name}** นะครับ 🎉\nอย่าลืมแนะนำตัวกันด้วยนะครับ 💬`
+            }).catch(error => {
+                console.error(
+                    `❌ ส่งข้อความต้อนรับไม่สำเร็จ: ${error.message}`
+                );
+            });
+
+        } else {
+            console.error(
+                `❌ ไม่พบห้องแนะนำตัว ${INTRO_CHANNEL_ID} หรือบอทไม่มีสิทธิ์ส่งข้อความ`
+            );
+        }
+    }
+);
+
 // MESSAGE DELETE
-// ========================================
-
 client.on(
     'messageDelete',
     async message => {
@@ -2196,11 +2168,7 @@ client.on(
     }
 );
 
-
-// ========================================
 // MESSAGE CREATE
-// ========================================
-
 client.on(
     'messageCreate',
     async message => {
@@ -2299,11 +2267,7 @@ client.on(
             );
         }
 
-
-        // ========================================
         // /img
-        // ========================================
-
         if (
             content.startsWith('/img')
         ) {
@@ -2325,11 +2289,7 @@ client.on(
             );
         }
 
-
-        // ========================================
         // GREETINGS
-        // ========================================
-
         const greetings = [
             'สวัสดีครับ',
             'สวัสดีค่ะ',
@@ -2350,11 +2310,7 @@ client.on(
             );
         }
 
-
-        // ========================================
         // CUSTOM REPLIES
-        // ========================================
-
         if (
             content.includes(
                 'คิดถึงหมาคีตะ'
@@ -2388,11 +2344,7 @@ client.on(
     }
 );
 
-
-// ========================================
 // MESSAGE UPDATE
-// ========================================
-
 client.on(
     'messageUpdate',
     (oldMessage, newMessage) => {
@@ -2434,11 +2386,7 @@ client.on(
     }
 );
 
-
-// ========================================
 // STATUS
-// ========================================
-
 const statusList = [
     {
         name:
@@ -2572,7 +2520,6 @@ const statusList = [
     }
 ];
 
-
 function setRandomStatus() {
     if (!client.user) {
         return;
@@ -2594,11 +2541,7 @@ function setRandomStatus() {
     });
 }
 
-
-// ========================================
 // DISCORD ERROR LOGGING
-// ========================================
-
 client.on(
     'error',
     error => {
@@ -2608,7 +2551,6 @@ client.on(
         );
     }
 );
-
 
 client.on(
     'warn',
@@ -2620,7 +2562,6 @@ client.on(
     }
 );
 
-
 client.on(
     'debug',
     info => {
@@ -2630,7 +2571,6 @@ client.on(
         );
     }
 );
-
 
 client.on(
     'shardError',
@@ -2642,7 +2582,6 @@ client.on(
     }
 );
 
-
 client.on(
     'shardReconnecting',
     shardId => {
@@ -2651,7 +2590,6 @@ client.on(
         );
     }
 );
-
 
 client.on(
     'shardReady',
@@ -2662,11 +2600,7 @@ client.on(
     }
 );
 
-
-// ========================================
 // READY
-// ========================================
-
 client.once(
     'ready',
     () => {
@@ -2690,11 +2624,7 @@ client.once(
     }
 );
 
-
-// ========================================
 // PROCESS ERROR
-// ========================================
-
 process.on(
     'unhandledRejection',
     error => {
@@ -2704,7 +2634,6 @@ process.on(
         );
     }
 );
-
 
 process.on(
     'uncaughtException',
@@ -2716,11 +2645,7 @@ process.on(
     }
 );
 
-
-// ========================================
 // DISCORD TOKEN
-// ========================================
-
 if (
     !process.env.DISCORD_TOKEN
 ) {
@@ -2730,13 +2655,11 @@ if (
 
     process.exit(1);
 }
-
 
 console.log(
     '🔄 กำลังทดสอบ Discord Gateway...'
 );
 
-
 if (
     !process.env.DISCORD_TOKEN
 ) {
@@ -2747,11 +2670,7 @@ if (
     process.exit(1);
 }
 
-
-// ========================================
 // TEST DISCORD GATEWAY
-// ========================================
-
 async function testDiscordGateway() {
     const controller =
         new AbortController();
@@ -2852,11 +2771,7 @@ async function testDiscordGateway() {
     }
 }
 
-
-// ========================================
 // LOGIN
-// ========================================
-
 testDiscordGateway()
     .then(
         success => {
